@@ -1,13 +1,15 @@
 /**
- * AlfaV Play inspired me to start writing this:
+ * @AlfaV Play inspired me to start writing this:
  * https://code.sololearn.com/WOeWZxyB7Tdv/?ref=app
  * https://www.sololearn.com/Profile/6240952/?ref=app
  * With the help from video by The Coding Train (Daniel Shiffman):
  * https://youtu.be/flxOkx0yLrY
+ * Original idea (game):
+ * http://agar.io
  */
 
 /* jshint esversion: 5, unused: true, undef: true */
-/* global v6, _, platform */
+/* global v6, _ */
 
 ;( function ( window ) {
 
@@ -38,7 +40,7 @@ var KEYS = {
   platform.os.family === 'iOS' &&
   platform.name === 'Safari'; */
 
-var touchable = 'ontouchend' in window && false,
+var touchable = 'ontouchend' in window,
     mode = '2d'; // touchable && !safari ? 'webgl' : '2d';
 
 var intersects = {
@@ -378,6 +380,10 @@ if ( touchable ) {
   };
 
   var keyup = function ( event ) {
+    if ( event.keyCode === KEYS.SPACE ) {
+      divided = false;
+    }
+
     keys[ event.keyCode ] = false;
   };
 
@@ -629,11 +635,7 @@ var update = function ( dt ) {
 
   last_blob_index = blobs.length - 1;
 
-  if ( touchable && stick.state === 2 ) {
-    force = v6.Vector2D
-      .fromAngle( stick.angle() )
-      .mult( stick.value() * stick.value() );
-  } else {
+  if ( !touchable ) {
     force = mouse
       .copy()
       .sub( camera.shouldLookAt()
@@ -643,13 +645,17 @@ var update = function ( dt ) {
       .limit( STICK_BIG_R )
       .div( STICK_BIG_R )
       .mult( player.force );
+  } else if ( stick.state === 2 ) {
+    force = v6.Vector2D
+      .fromAngle( stick.angle() )
+      .mult( stick.value() * player.force );
   }
 
   if ( force ) {
     player.acc.add( force );
   }
 
-  if ( touchable && button.state && !divided ) {
+  if ( ( touchable ? button.state : keys[ KEYS.SPACE ] ) && !divided ) {
     player.divide();
     divided = true;
   }
@@ -724,7 +730,7 @@ var render = function () {
   renderer
     .restore()
     .save()
-    .clear()
+    .backgroundColor( 255 )
     .setTransformFromCamera( camera )
     .lineWidth( 1 / camera.scale[ 0 ] )
     .stroke( 102 )
