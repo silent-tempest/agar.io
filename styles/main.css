@@ -1,0 +1,44 @@
+/**
+ * 1. Reset click style.
+ * 2. Prevent selecting.
+ */
+canvas,
+html,
+body,
+p {
+  -webkit-tap-highlight-color: transparent; /* 1 */
+  -webkit-focus-ring-color: transparent; /* 1 */
+  -webkit-user-select: none;
+     -moz-user-select: none;
+       -o-user-select: none;
+          user-select: none; /* 2 */
+}
+
+/**
+ * Multiple canvases will be used.
+ */
+canvas {
+  position: fixed;
+  left: 0;
+  top: 0;
+}
+
+/**
+ * Remove "pull-down-to-refresh".
+ */
+body {
+  overflow: hidden;
+}
+
+/**
+ * 1. Show over other elements.
+ * 2. Padding from top-left corner.
+ */
+#score {
+  position: fixed;
+  z-index: 1; /* 1 */
+  left: 24px; /* 2 */
+  top: 24px;  /* 2 */
+  color: rgba( 0, 0, 0, 0.12 );
+  font: 700 36px / 1 monospace;
+}
