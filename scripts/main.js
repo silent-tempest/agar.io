@@ -38,7 +38,7 @@ var KEYS = {
   platform.os.family === 'iOS' &&
   platform.name === 'Safari'; */
 
-var touchable = 'ontouchend' in window && false,
+var touchable = 'ontouchend' in window,
     mode = '2d'; // touchable && !safari ? 'webgl' : '2d';
 
 var intersects = {
@@ -378,6 +378,10 @@ if ( touchable ) {
   };
 
   var keyup = function ( event ) {
+    if ( event.keyCode === KEYS.SPACE ) {
+      divided = false;
+    }
+
     keys[ event.keyCode ] = false;
   };
 
@@ -627,13 +631,9 @@ var update = function ( dt ) {
     time_of_last_added_blob = this.total;
   }
 
-  last_blob_index = blobs.length - 1;
+  last_blob_index = blobs.length - 1;try{
 
-  if ( touchable && stick.state === 2 ) {
-    force = v6.Vector2D
-      .fromAngle( stick.angle() )
-      .mult( stick.value() * stick.value() );
-  } else {
+  if ( !touchable ) {
     force = mouse
       .copy()
       .sub( camera.shouldLookAt()
@@ -643,17 +643,21 @@ var update = function ( dt ) {
       .limit( STICK_BIG_R )
       .div( STICK_BIG_R )
       .mult( player.force );
+  } else if ( stick.state === 2 ) {
+    force = v6.Vector2D
+      .fromAngle( stick.angle() )
+      .mult( stick.value() * player.force );
   }
 
   if ( force ) {
     player.acc.add( force );
   }
 
-  if ( touchable && button.state && !divided ) {
+  if ( ( touchable ? button.state : keys[ KEYS.SPACE ] ) && !divided ) {
     player.divide();
     divided = true;
   }
-
+} catch ( e ) { alert( e ); }
   for ( i = last_blob_index; i >= 0; --i ) {
     blob = blobs[ i ];
 
@@ -724,7 +728,7 @@ var render = function () {
   renderer
     .restore()
     .save()
-    .clear()
+    .backgroundColor( 255 )
     .setTransformFromCamera( camera )
     .lineWidth( 1 / camera.scale[ 0 ] )
     .stroke( 102 )
