@@ -6,6 +6,10 @@
  * https://youtu.be/flxOkx0yLrY
  * Original idea (game):
  * http://agar.io
+ * GitHub repository:
+ * https://github.com/silent-tempest/agar.io
+ * Test in browser:
+ * https://silent-tempest.github.io/agar.io
  */
 
 /* jshint esversion: 5, unused: true, undef: true */
@@ -557,7 +561,7 @@ Robot.prototype = _.assign( {}, Blob.prototype, {
         continue;
       }
 
-      if ( look_for_food ? other.r > this.r : this.r > other.r ) {
+      if ( look_for_food ? other.r >= this.r : this.r > other.r ) {
         continue;
       }
 
@@ -824,16 +828,29 @@ _( function () {
   } );
 
   if ( touchable ) {
-    stick = new Stick( {
-      touch_zone: [
-        0, 0, 1, 1
-      ],
+    if ( confirm( 'Are you left-handed?' ) ) {
+      stick = new Stick( {
+        touch_zone: [
+          -1, 0, 0, 1
+        ],
 
-      x: 0.5,
-      y: 0.5
-    } );
+        x: -0.5,
+        y: 0.5
+      } );
 
-    button = new Button( -0.5, 0.5 );
+      button = new Button( 0.5, 0.5 );
+    } else {
+      stick = new Stick( {
+        touch_zone: [
+          0, 0, 1, 1
+        ],
+
+        x: 0.5,
+        y: 0.5
+      } );
+
+      button = new Button( -0.5, 0.5 );
+    }
 
     button.ontouchend = function () {
       divided = false;

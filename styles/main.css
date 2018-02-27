@@ -40,5 +40,5 @@ body {
   left: 24px; /* 2 */
   top: 24px;  /* 2 */
   color: rgba( 0, 0, 0, 0.12 );
-  font: 700 36px / 1 monospace;
+  font: 500 36px / 1 UbuntuFont, sans-serif;
 }
