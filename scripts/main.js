@@ -20,8 +20,10 @@
 'use strict';
 
 var min = Math.min,
-    max = Math.max,
+    // max = Math.max,
     pow = Math.pow,
+    cos = Math.cos,
+    sin = Math.sin,
     sqrt = Math.sqrt,
     rand = Math.random,
     floor = Math.floor;
@@ -31,7 +33,10 @@ var MAP_SIZE = 5000,
     FOOD_SIZE = 7.5,
     /** Thanks to @Aaron Eberhard. I didn't knew about this feature. */
     MAX_BLOB_RADIUS = 500,
-    STICK_BIG_R = 45;
+    STICK_BIG_R = 45,
+    NEW_ROBOT_CHANCE = 0.025,
+    PLAYER_NAME = 'You',
+    BLOB_ID = -1;
 
 var KEYS = {
   SPACE: 32
@@ -141,7 +146,7 @@ if ( touchable ) {
         if ( identifiers[ ( touch = touches[ --i ] ).identifier ] ) {
           /** Move the movable part of the stick. */
           location
-            .set( touch.clientX - start[ 0 ], touch.clientY - start[ 1 ] )
+            .set( touch.clientX - start.x, touch.clientY - start.y )
             .limit( STICK_BIG_R );
           that.state = 2;
           that.redraw = true;
@@ -171,7 +176,7 @@ if ( touchable ) {
 
     var resize = function ( event ) {
       if ( event ) {
-        renderer.fullwindow();
+        renderer.resize( true );
       }
 
       touch_zone = get_touch_zone(
@@ -199,10 +204,10 @@ if ( touchable ) {
         .restore()
         .clear()
         .save()
-        .setTransform( 1, 0, 0, 1, this.start[ 0 ], this.start[ 1 ] )
+        .setTransform( 1, 0, 0, 1, this.start.x, this.start.y )
         .fill( this.colors[ this.state ] )
         .arc( 0, 0, STICK_BIG_R )
-        .arc( this.location[ 0 ], this.location[ 1 ], SMALL_R );
+        .arc( this.location.x, this.location.y, SMALL_R );
 
       this.redraw = false;
       return this;
@@ -385,7 +390,7 @@ if ( touchable ) {
 
   var keyup = function ( event ) {
     if ( event.keyCode === KEYS.SPACE ) {
-      divided = false;
+      splitted = false;
     }
 
     keys[ event.keyCode ] = false;
@@ -406,8 +411,8 @@ var Food = function ( x, y, r ) {
 
 Food.prototype = {
   show: function () {
-    var x = this.pos[ 0 ],
-        y = this.pos[ 1 ],
+    var x = this.pos.x,
+        y = this.pos.y,
         r = this.r;
 
     if ( camera.sees( x - r, y - r, r * 2, r * 2 ) ) {
@@ -423,63 +428,80 @@ Food.prototype = {
   type: 'food'
 };
 
-var Blob = function ( x, y, r ) {
-  if ( typeof x == 'object' ) {
-    this.r = x.r = sqrt( x.r * x.r * 0.5 );
-    this.eaten = false;
-    this.pos = x.pos
-      .copy()
-      .add( x.vel.copy().setMag( x.r * 2 ) );
-    this.vel = x.vel.copy().mult( 2.5 );
-    this.color = x.color;
-    this.stroke_color = x.stroke_color;
-    this.score = x.score *= 0.5;
-    this.base = x;
-  } else {
-    Food.call( this, x, y, r );
-    this.vel = v6.vec2();
-    this.score = this.r;
-    this.stroke_color = this.color.shade( -10 );
-  }
-
+var Blob = function ( x, y, r, name ) {
+  Food.call( this, x, y, r );
+  this.vel = v6.vec2();
+  this.score = this.r;
+  this.stroke_color = this.color.shade( -10 );
   this.acc = v6.vec2();
+  this.parts = [ this ];
+  this.part_of = [];
+  this.root = this;
+  this.id = ++BLOB_ID;
+
+  if ( name ) {
+    this.name = name;
+  } else {
+    this.name = 'Player #' + this.id;
+  }
 };
 
 Blob.prototype = _.assign( {}, Food.prototype, {
   show: function () {
-    var x = this.pos[ 0 ],
-        y = this.pos[ 1 ],
+    var x = this.pos.x,
+        y = this.pos.y,
         r = this.r;
 
-    if ( camera.sees( x - r, y - r, r * 2, r * 2 ) ) {
-      renderer
-        .stroke( this.stroke_color )
-        .fill( this.color )
-        .arc( x, y, r );
+    if ( !camera.sees( x - r, y - r, r * 2, r * 2 ) ) {
+      return;
     }
+
+    renderer
+      .stroke( this.stroke_color )
+      .fill( this.color )
+      .arc( x, y, r );
+
+    /* if ( r * camera.scale[ 0 ] <= 50 ) {
+      return;
+    }
+
+    if ( this.color.contrast() > 75 ) {
+      renderer
+        .stroke( 255 )
+        .fill( 0 );
+    } else {
+      renderer
+        .stroke( 0 )
+        .fill( 255 );
+    }
+
+    renderer
+      .push()
+      .lineWidth( 1 )
+      .text( this.name, x, y )
+      .pop(); */
   },
 
   update: function ( dt ) {
-    var steer;
+    var steer, cur_spd;
 
     // this equation taken from
     // https://amp.reddit.com/r/Agario/comments/6f0njp/movement_speed_equation/
     this.speed = 2.2 * pow( this.r, -0.439 ) * 350;
 
-    if ( this.pos[ 0 ] < 0 ) {
-      steer = v6.vec2( this.speed, this.vel[ 1 ] );
-    } else if ( this.pos[ 1 ] < 0 ) {
-      steer = v6.vec2( this.vel[ 0 ], this.speed );
-    } else if ( this.pos[ 0 ] > MAP_SIZE ) {
-      steer = v6.vec2( -this.speed, this.vel[ 1 ] );
-    } else if ( this.pos[ 1 ] > MAP_SIZE ) {
-      steer = v6.vec2( this.vel[ 0 ], -this.speed );
+    if ( this.pos.x < 0 ) {
+      steer = v6.vec2( this.speed, this.vel.y );
+    } else if ( this.pos.y < 0 ) {
+      steer = v6.vec2( this.vel.x, this.speed );
+    } else if ( this.pos.x > MAP_SIZE ) {
+      steer = v6.vec2( -this.speed, this.vel.y );
+    } else if ( this.pos.y > MAP_SIZE ) {
+      steer = v6.vec2( this.vel.x, -this.speed );
     }
 
     if ( steer ) {
       steer
-        .normalize()
-        .mult( this.speed )
+        .setMag( this.speed )
         .sub( this.vel )
         .limit( this.force );
 
@@ -488,21 +510,32 @@ Blob.prototype = _.assign( {}, Food.prototype, {
 
     this.pos.add( this.vel
       .add( this.acc )
-      .limit( this.speed )
       .copy()
       .mult( dt ) );
 
+    cur_spd = this.vel.mag();
+
+    if ( cur_spd > this.speed ) {
+      this.vel.setMag( cur_spd - ( cur_spd - this.speed ) * 0.75 );
+    }
+
+    this._acc = this.acc.mag();
     this.acc.set( 0, 0 );
     this.vel.mult( 0.975 );
   },
 
   eat: function ( food ) {
-    if ( this.base === food ) {
-      return;
-    }
-
-    this.score += food.score;
     food.eaten = true;
+    
+    if ( food.root === this ) {
+      this.score += food.score - food.start_score;
+    } else {
+      this.score += food.score;
+    }
+    
+    if ( food.root ) {
+      food.remove();
+    }
 
     if ( this.r >= MAX_BLOB_RADIUS ) {
       return;
@@ -511,14 +544,73 @@ Blob.prototype = _.assign( {}, Food.prototype, {
     this.r = min( sqrt( this.r * this.r + food.r * food.r ), MAX_BLOB_RADIUS );
   },
 
-  divide: function () {
-    if ( this.r > FOOD_SIZE * 2 ) {
-      blobs.push( new Blob( this ) );
+  split: function () {
+    var parts = this.parts,
+        len = parts.length,
+        vel_angle = this.vel.angle(),
+        i = 0,
+        part, r, new_part;
+    
+    for ( ; i < len; ++i ) {
+      part = parts[ i ];
+      r = sqrt( part.r * part.r * 0.5 );
+
+      if ( r > FOOD_SIZE ) {
+        part.r = r;
+        new_part = new BlobPart( part, vel_angle );
+        blobs.push( new_part );
+        parts.push( new_part );
+      }
     }
   },
 
   dist: function ( other ) {
     return this.pos.dist( other.pos ) - this.r - other.r;
+  },
+
+  apply_force: function ( force ) {
+    var i = this.parts.length - 1,
+        part;
+
+    this.acc.add( force );
+
+    for ( ; i >= 0; --i ) {
+      if ( ( part = this.parts[ i ] ) !== this ) {
+        part.apply_force( force );
+      }
+    }
+  },
+
+  remove: function () {
+    var i = this.part_of.length - 1,
+        parts = this.root.parts,
+        shortest_dist = Infinity,
+        part, cand, j, closest, test_dist;
+
+    for ( ; i >= 0; --i ) {
+      part = this.part_of[ i ];
+
+      for ( j = parts.length - 1; j >= 0; --j ) {
+        cand = parts[ j ];
+
+        if ( cand !== this && cand !== part &&
+          ( test_dist = part.dist( cand ) ) <= shortest_dist )
+        {
+          shortest_dist = test_dist;
+          closest = cand;
+        }
+      }
+
+      part.part = closest;
+    }
+
+    if ( ~( i = parts.indexOf( this ) ) ) {
+      parts.splice( i, 1 );
+    }
+  },
+
+  toString: function () {
+    return this.name;
   },
 
   constructor: Blob,
@@ -529,8 +621,8 @@ Blob.prototype = _.assign( {}, Food.prototype, {
 
 var create_dna = function () {
   return [
-    _.random( 0.6, 1, true ),
-    _.random( -1, -0.6, true ),
+    _.random( 0.75, 1, true ),
+    _.random( -1, -0.75, true ),
     _.random( 200, 400, true ),
     _.random( 200, 400, true )
   ];
@@ -539,6 +631,7 @@ var create_dna = function () {
 var Robot = function ( x, y, r ) {
   Blob.call( this, x, y, r );
   this.dna = create_dna();
+  this.name = 'Bot #' + this.id;
 };
 
 Robot.prototype = _.assign( {}, Blob.prototype, {
@@ -579,11 +672,15 @@ Robot.prototype = _.assign( {}, Blob.prototype, {
     }
 
     if ( closest ) {
-      this.seek( closest.pos, look_for_food );
+      this.seek( closest, look_for_food );
       this.__target = null;
     } else if ( look_for_food ) {
-      if ( !this.__target || this.__target.dist( this.pos ) < this.r + 50 ) {
-        this.__target = v6.vec2( _.random( MAP_SIZE ), _.random( MAP_SIZE ) );
+      if ( !this.__target || this.__target.pos.dist( this.pos ) < this.r ) {
+        // imitating a blob to use it in the seek function
+        this.__target = {
+          pos: v6.vec2( _.random( MAP_SIZE ), _.random( MAP_SIZE ) ),
+          r: 0
+        };
       }
 
       this.seek( this.__target, true );
@@ -599,12 +696,16 @@ Robot.prototype = _.assign( {}, Blob.prototype, {
       attraction = this.dna[ 1 ];
     }
 
-    attraction_force = target
+    attraction_force = target.pos
       .copy()
-      .sub( this.pos )
+      .sub( this.pos );
+
+    attraction_force
+      .setMag( attraction_force.mag() - this.r - target.r )
       .setMag( this.speed )
       .sub( this.vel )
       .limit( this.force )
+      // .mult( this.dna[ +!look_for_food ] )
       .mult( attraction );
 
     this.acc.add( attraction_force );
@@ -616,27 +717,84 @@ Robot.prototype = _.assign( {}, Blob.prototype, {
   },
 
   constructor: Robot,
-  force: 10,
   type: 'robot'
+} );
+
+var BlobPart = function ( part, vel_angle ) {
+  this.id = ++BLOB_ID;
+  this.pos = part.pos
+    .copy()
+    .add( part.r * 2 * cos( vel_angle ), part.r * 2 * sin( vel_angle ) );
+  this.vel = part.vel.copy().mult( 10 );
+  this.acc = v6.vec2();
+  this.color = part.color;
+  this.stroke_color = part.stroke_color;
+  this.part = part;
+  this.root = part.root;
+  this.eaten = false;
+  this.score = part.score * 0.5;
+  this.start_score = this.score;
+  this.dna = [ 1, -1 ];
+  this.r = part.r;
+  this.part_of = [];
+  part.part_of.push( this );
+};
+
+BlobPart.prototype = _.assign( {}, Robot.prototype, {
+  eat: function ( food ) {
+    if ( this.root === food ) {
+      return;
+    }
+
+    Blob.prototype.eat.call( this, food );
+  },
+
+  update: function ( dt ) {
+    /* var root = this.root,
+        parts = root.parts,
+        i = parts.length - 1,
+        part;
+
+    for ( ; i >= 0; --i ) {
+      part = parts[ i ];
+
+      if ( part !== this && part !== root && this.dist( part ) < 0 ) {
+        this.seek( part );
+      }
+    } */
+
+    if ( this.part ) {
+      this.seek( this.part, true );
+    }
+
+    Blob.prototype.update.call( this, dt );
+  },
+
+  apply_force: function ( force ) {
+    this.acc.add( force );
+  },
+
+  constructor: BlobPart,
+  type: 'blob-part'
 } );
 
 var time_of_last_added_blob = 0;
 
 var update = function ( dt ) {
-  var last_blob_index, max_radius, blob, force, i, j, other;
+  var leaders, html, last_blob_index, max_radius, blob, force, i, j, other;
 
-  if ( blobs.length < 400 &&
-       this.total - time_of_last_added_blob > 0.1 )
+  if ( blobs.length < 1000 &&
+       this.totalTime - time_of_last_added_blob > 0.1 )
   {
-    if ( rand() < 0.05 ) {
+    if ( rand() < NEW_ROBOT_CHANCE ) {
       blobs.push( generate( Robot, BLOB_SIZE ) );
     } else {
       blobs.push( generate( Food, FOOD_SIZE ) );
     }
 
-    time_of_last_added_blob = this.total;
+    time_of_last_added_blob = this.totalTime;
   }
-
+  
   last_blob_index = blobs.length - 1;
 
   if ( !touchable ) {
@@ -656,12 +814,12 @@ var update = function ( dt ) {
   }
 
   if ( force ) {
-    player.acc.add( force );
+    player.apply_force( force );
   }
 
-  if ( ( touchable ? button.state : keys[ KEYS.SPACE ] ) && !divided ) {
-    player.divide();
-    divided = true;
+  if ( ( touchable ? button.state : keys[ KEYS.SPACE ] ) && !splitted ) {
+    player.split();
+    splitted = true;
   }
 
   for ( i = last_blob_index; i >= 0; --i ) {
@@ -700,7 +858,7 @@ var update = function ( dt ) {
 
     if ( blob.eaten ) {
       if ( blob === player ) {
-        blobs[ i ] = player = generate( Blob, BLOB_SIZE );
+        blobs[ i ] = player = generate( Blob, BLOB_SIZE, PLAYER_NAME );
       } else {
         blobs.splice( i, 1 );
       }
@@ -720,6 +878,44 @@ var update = function ( dt ) {
     .update();
 
   blobs.sort( sort_blobs );
+
+  if ( ui.leaderboard_hidden ) {
+    return;
+  }
+
+  leaders = [];
+
+  for ( i = blobs.length - 1; i >= 0; --i ) {
+    blob = blobs[ i ];
+
+    if ( blob.type === 'food' ) {
+      continue;
+    }
+
+    if ( blob.root ) {
+      blob = blob.root;
+    }
+
+    if ( leaders.indexOf( blob ) < 0 ) {
+      leaders.push( blob )
+    }
+  }
+
+  leaders.sort( sort_leaders );
+
+  if ( leaders.length > 10 ) {
+    leaders.length = 10;
+  }
+
+  html = '<li>' + leaders.join( '</li><li>' ) + '</li>';
+
+  if ( leaderboard.innerHTML !== html ) {
+    leaderboard.innerHTML = html;
+  }
+};
+
+var sort_leaders = function ( a, b ) {
+  return b.score - a.score;
 };
 
 var sort_blobs = function ( a, b ) {
@@ -771,22 +967,22 @@ var render = function () {
   }
 };
 
-var generate = function ( Food, r ) {
+var generate = function ( Food, r, name ) {
   var pad = 50,
       x = _.random( pad, MAP_SIZE - pad ),
       y = _.random( pad, MAP_SIZE - pad );
 
-  return new Food( x, y, r );
+  return new Food( x, y, r, name );
 };
 
 var reset = function () {
-  var blobs_len = blobs.length = 200;
+  var blobs_len = blobs.length = 250;
 
-  blobs[ 0 ] = player = generate( Blob, BLOB_SIZE );
+  blobs[ 0 ] = player = generate( Blob, BLOB_SIZE, PLAYER_NAME );
   ui[ '#score' ].text( score = 0 );
 
   while ( --blobs_len > 0 ) {
-    if ( rand() < 0.05 ) {
+    if ( rand() < NEW_ROBOT_CHANCE ) {
       blobs[ blobs_len ] = generate( Robot, BLOB_SIZE );
     } else {
       blobs[ blobs_len ] = generate( Food, FOOD_SIZE );
@@ -797,17 +993,32 @@ var reset = function () {
 var ui = {
   init: function () {
     this[ '#score' ] = _( '#score' );
+
+    _( '.leaderboard .header' ).click( function () {
+      if ( ( ui.leaderboard_hidden = leaderboard.style.display !== 'none' ) ) {
+        leaderboard.style.display = 'none';
+      } else {
+        // why "initial" don't work?
+        leaderboard.style.display = 'block';
+      }
+    } );
   }
 };
 
 var blobs = [],
-    divided = false,
+    splitted = false,
     score, renderer, stick, button, camera, player, mouse;
 
 _( function () {
   renderer = v6( {
     mode: mode // default '2d'
   } );
+
+  renderer
+    .textAlign( 'center' )
+    .textBaseline( 'center' )
+    .font( 500, 22, 'Ubuntu, sans-serif' )
+    .lineHeight( 22 );
 
   window.document.body.style.background =
     renderer.canvas.style.background = '#fff';
@@ -828,7 +1039,7 @@ _( function () {
   } );
 
   if ( touchable ) {
-    if ( confirm( 'Are you left-handed?' ) ) {
+    if ( window.confirm( 'Are you left-handed?' ) ) {
       stick = new Stick( {
         touch_zone: [
           -1, 0, 0, 1
@@ -853,7 +1064,7 @@ _( function () {
     }
 
     button.ontouchend = function () {
-      divided = false;
+      splitted = false;
     };
   } else {
     mouse = v6.vec2( renderer.width * 0.5, renderer.height * 0.5 );
