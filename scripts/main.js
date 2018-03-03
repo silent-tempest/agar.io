@@ -20,7 +20,7 @@
 'use strict';
 
 var min = Math.min,
-    // max = Math.max,
+    max = Math.max,
     pow = Math.pow,
     cos = Math.cos,
     sin = Math.sin,
@@ -461,7 +461,7 @@ Blob.prototype = _.assign( {}, Food.prototype, {
       .fill( this.color )
       .arc( x, y, r );
 
-    /* if ( r * camera.scale[ 0 ] <= 50 ) {
+    /* if ( r * camera.zoom[ 0 ] <= 50 ) {
       return;
     }
 
@@ -516,10 +516,9 @@ Blob.prototype = _.assign( {}, Food.prototype, {
     cur_spd = this.vel.mag();
 
     if ( cur_spd > this.speed ) {
-      this.vel.setMag( cur_spd - ( cur_spd - this.speed ) * 0.75 );
+      this.vel.setMag( cur_spd + ( this.speed - cur_spd ) * 0.75 );
     }
 
-    this._acc = this.acc.mag();
     this.acc.set( 0, 0 );
     this.vel.mult( 0.975 );
   },
@@ -613,18 +612,25 @@ Blob.prototype = _.assign( {}, Food.prototype, {
     return this.name;
   },
 
+  /* control: function ( angle, throttle ) {
+    var speed = this.vel.mag() + this.force * throttle;
+    this.vel.set( speed * cos( angle ), speed * sin( angle ) );
+  }, */
+
   constructor: Blob,
   speed: 0,
-  force: 20,
+  force: 25,
   type: 'blob'
 } );
 
 var create_dna = function () {
   return [
-    _.random( 0.75, 1, true ),
-    _.random( -1, -0.75, true ),
-    _.random( 200, 400, true ),
-    _.random( 200, 400, true )
+    _.random( 0.5, 1, true ),   // + attraction force
+    _.random( -1, -0.8, true ), // - attraction force
+    _.random( 200, 400, true ), // + perception
+    _.random( 200, 400, true ), // - perception
+    _.random( 7.5, 10, true ),  // + force
+    _.random( 15, 20, true )    // - force
   ];
 };
 
@@ -632,6 +638,7 @@ var Robot = function ( x, y, r ) {
   Blob.call( this, x, y, r );
   this.dna = create_dna();
   this.name = 'Bot #' + this.id;
+  this.force = max( this.dna[ 4 ], this.dna[ 5 ] );
 };
 
 Robot.prototype = _.assign( {}, Blob.prototype, {
@@ -654,7 +661,7 @@ Robot.prototype = _.assign( {}, Blob.prototype, {
         continue;
       }
 
-      if ( look_for_food ? other.r >= this.r : this.r > other.r ) {
+      if ( look_for_food ? this.r / other.r < 1.1 : this.r > other.r ) {
         continue;
       }
 
@@ -687,25 +694,32 @@ Robot.prototype = _.assign( {}, Blob.prototype, {
     }
   },
 
-  seek: function ( target, look_for_food ) {
-    var attraction, attraction_force;
+  seek: function ( target, look_for_food, edge ) {
+    var attraction, attraction_force, force, dist;
 
     if ( look_for_food ) {
       attraction = this.dna[ 0 ];
+      force = this.dna[ 4 ];
     } else {
       attraction = this.dna[ 1 ];
+      force = this.dna[ 5 ];
     }
 
     attraction_force = target.pos
       .copy()
       .sub( this.pos );
 
+    dist = attraction_force.mag();
+
+    if ( edge ) {
+      attraction_force
+        .setMag( dist - this.r - target.r );
+    }
+
     attraction_force
-      .setMag( attraction_force.mag() - this.r - target.r )
       .setMag( this.speed )
       .sub( this.vel )
-      .limit( this.force )
-      // .mult( this.dna[ +!look_for_food ] )
+      .limit( force )
       .mult( attraction );
 
     this.acc.add( attraction_force );
@@ -742,7 +756,7 @@ var BlobPart = function ( part, vel_angle ) {
 
 BlobPart.prototype = _.assign( {}, Robot.prototype, {
   eat: function ( food ) {
-    if ( this.root === food ) {
+    if ( food === this.root ) {
       return;
     }
 
@@ -764,7 +778,7 @@ BlobPart.prototype = _.assign( {}, Robot.prototype, {
     } */
 
     if ( this.part ) {
-      this.seek( this.part, true );
+      this.seek( this.part, true, true );
     }
 
     Blob.prototype.update.call( this, dt );
@@ -775,6 +789,7 @@ BlobPart.prototype = _.assign( {}, Robot.prototype, {
   },
 
   constructor: BlobPart,
+  force: Blob.prototype.force,
   type: 'blob-part'
 } );
 
@@ -783,7 +798,7 @@ var time_of_last_added_blob = 0;
 var update = function ( dt ) {
   var leaders, html, last_blob_index, max_radius, blob, force, i, j, other;
 
-  if ( blobs.length < 1000 &&
+  if ( blobs.length < 400 &&
        this.totalTime - time_of_last_added_blob > 0.1 )
   {
     if ( rand() < NEW_ROBOT_CHANCE ) {
@@ -802,12 +817,14 @@ var update = function ( dt ) {
       .copy()
       .sub( camera.shouldLookAt()
         .sub( camera.looksAt() )
-        .mult( camera.scale[ 0 ] )
+        .mult( camera.zoom[ 0 ] )
         .add( renderer.width * 0.5, renderer.height * 0.5 ) )
       .limit( STICK_BIG_R )
       .div( STICK_BIG_R )
       .mult( player.force );
   } else if ( stick.state === 2 ) {
+    // player.control( stick.angle(), stick.value() );
+    
     force = v6.Vector2D
       .fromAngle( stick.angle() )
       .mult( stick.value() * player.force );
@@ -845,7 +862,7 @@ var update = function ( dt ) {
       other = blobs[ j ];
 
       if ( blob !== other &&
-           blob.r > other.r &&
+           blob.r / other.r > 1.1 &&
            blob.dist( other ) < 0 )
       {
         blob.eat( other );
@@ -867,9 +884,9 @@ var update = function ( dt ) {
 
   max_radius = min( renderer.width, renderer.height ) / 17.5;
 
-  if ( player.r * camera.scale[ 0 ] + 1 < max_radius ) {
+  if ( player.r * camera.zoom[ 0 ] + 1 < max_radius ) {
     camera.zoomIn();
-  } else if ( player.r * camera.scale[ 0 ] > max_radius ) {
+  } else if ( player.r * camera.zoom[ 0 ] > max_radius ) {
     camera.zoomOut();
   }
 
@@ -932,7 +949,7 @@ var render = function () {
     .save()
     .backgroundColor( 255 )
     .setTransformFromCamera( camera )
-    .lineWidth( 1 / camera.scale[ 0 ] )
+    .lineWidth( 1 / camera.zoom[ 0 ] )
     .stroke( 102 )
     .noFill()
     /** Draw the map border. */
@@ -946,7 +963,7 @@ var render = function () {
       .line( 0, x, MAP_SIZE, x );
   }
 
-  renderer.lineWidth( 5 / camera.scale[ 0 ] );
+  renderer.lineWidth( 5 / camera.zoom[ 0 ] );
 
   for ( i = blobs.length - 1; i >= 0; --i ) {
     blobs[ i ].show();
@@ -976,7 +993,7 @@ var generate = function ( Food, r, name ) {
 };
 
 var reset = function () {
-  var blobs_len = blobs.length = 250;
+  var blobs_len = blobs.length = 200;
 
   blobs[ 0 ] = player = generate( Blob, BLOB_SIZE, PLAYER_NAME );
   ui[ '#score' ].text( score = 0 );
@@ -1014,11 +1031,11 @@ _( function () {
     mode: mode // default '2d'
   } );
 
-  renderer
+  /* renderer
     .textAlign( 'center' )
     .textBaseline( 'center' )
     .font( 500, 22, 'Ubuntu, sans-serif' )
-    .lineHeight( 22 );
+    .lineHeight( 22 ); */
 
   window.document.body.style.background =
     renderer.canvas.style.background = '#fff';
@@ -1031,10 +1048,10 @@ _( function () {
       0.0025  // zoom out
     ],
 
-    scale: [
-      0.9,  // scale
-      0.05, // min scale (zoom out)
-      0.9   // max scale (zoom in)
+    zoom: [
+      0.9,  // zoom
+      0.05, // min zoom (zoom out)
+      0.9   // max zoom (zoom in)
     ]
   } );
 
