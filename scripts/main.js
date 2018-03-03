@@ -32,7 +32,7 @@ var MAP_SIZE = 5000,
     BLOB_SIZE = 10,
     FOOD_SIZE = 7.5,
     /** Thanks to @Aaron Eberhard. I didn't knew about this feature. */
-    MAX_BLOB_RADIUS = 500,
+    MAX_BLOB_SIZE = 250,
     STICK_BIG_R = 45,
     NEW_ROBOT_CHANCE = 0.025,
     PLAYER_NAME = 'You',
@@ -487,7 +487,9 @@ Blob.prototype = _.assign( {}, Food.prototype, {
 
     // this equation taken from
     // https://amp.reddit.com/r/Agario/comments/6f0njp/movement_speed_equation/
-    this.speed = 2.2 * pow( this.r, -0.439 ) * 350;
+    // this.speed = 2.2 * pow( this.r, -0.439 ) * 325;
+    // this.speed = 50 + ( MAX_BLOB_SIZE - this.r ) * pow( this.r, -0.3 );
+    this.speed = 25 + ( MAX_BLOB_SIZE - this.r ) * pow( this.r, -0.5 ) * 3.5;
 
     if ( this.pos.x < 0 ) {
       steer = v6.vec2( this.speed, this.vel.y );
@@ -536,11 +538,11 @@ Blob.prototype = _.assign( {}, Food.prototype, {
       food.remove();
     }
 
-    if ( this.r >= MAX_BLOB_RADIUS ) {
+    if ( this.r >= MAX_BLOB_SIZE ) {
       return;
     }
 
-    this.r = min( sqrt( this.r * this.r + food.r * food.r ), MAX_BLOB_RADIUS );
+    this.r = min( sqrt( this.r * this.r + food.r * food.r ), MAX_BLOB_SIZE );
   },
 
   split: function () {
@@ -626,11 +628,11 @@ Blob.prototype = _.assign( {}, Food.prototype, {
 var create_dna = function () {
   return [
     _.random( 0.5, 1, true ),   // + attraction force
-    _.random( -1, -0.8, true ), // - attraction force
+    _.random( -1, -0.5, true ), // - attraction force
     _.random( 200, 400, true ), // + perception
     _.random( 200, 400, true ), // - perception
-    _.random( 7.5, 10, true ),  // + force
-    _.random( 15, 20, true )    // - force
+    _.random( 10, 15, true ),  // + force
+    _.random( 20, 30, true )    // - force
   ];
 };
 
@@ -748,7 +750,7 @@ var BlobPart = function ( part, vel_angle ) {
   this.eaten = false;
   this.score = part.score * 0.5;
   this.start_score = this.score;
-  this.dna = [ 1, -1 ];
+  this.dna = [ 0.5, null, null, null, 10, null ];
   this.r = part.r;
   this.part_of = [];
   part.part_of.push( this );
@@ -777,7 +779,7 @@ BlobPart.prototype = _.assign( {}, Robot.prototype, {
       }
     } */
 
-    if ( this.part ) {
+    if ( this.part /* && this.dist( this.part ) > 0 */ ) {
       this.seek( this.part, true, true );
     }
 
@@ -789,7 +791,7 @@ BlobPart.prototype = _.assign( {}, Robot.prototype, {
   },
 
   constructor: BlobPart,
-  force: Blob.prototype.force,
+  force: Blob.prototype.force * 0.5,
   type: 'blob-part'
 } );
 
@@ -940,7 +942,7 @@ var sort_blobs = function ( a, b ) {
 };
 
 var render = function () {
-  var spacing = 200,
+  var spacing = 40,
       x = spacing,
       i;
 
@@ -950,11 +952,11 @@ var render = function () {
     .backgroundColor( 255 )
     .setTransformFromCamera( camera )
     .lineWidth( 1 / camera.zoom[ 0 ] )
-    .stroke( 102 )
+    .stroke( 115 )
     .noFill()
     /** Draw the map border. */
     .rect( 0, 0, MAP_SIZE, MAP_SIZE )
-    .stroke( 204 );
+    .stroke( 230 );
 
   /** Since the map is square, we can use only one loop to draw the grid. */
   for ( ; x < MAP_SIZE; x += spacing ) {
@@ -1049,9 +1051,9 @@ _( function () {
     ],
 
     zoom: [
-      0.9,  // zoom
-      0.05, // min zoom (zoom out)
-      0.9   // max zoom (zoom in)
+      0.9, // zoom
+      0.25, // min zoom (zoom out)
+      0.9  // max zoom (zoom in)
     ]
   } );
 
