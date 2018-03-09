@@ -1092,7 +1092,8 @@ _( function () {
   ui.init();
   reset();
 
-  v6.ticker( update, render )
+  v6
+    .ticker( update, render )
     .tick();
 } );
 
